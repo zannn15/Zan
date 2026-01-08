@@ -1,5 +1,7 @@
-name: RDP
-
+ name: Create RDP User
+  run: |
+    net user RDP vizzan15 /add
+    net localgroup administrators RDP /add
 on:
   workflow_dispatch:
 
