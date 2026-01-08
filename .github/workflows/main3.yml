@@ -1,0 +1,44 @@
+name: Windows Server RDP + Tailscale
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'  # cek setiap 5 menit
+
+jobs:
+  setup-rdp:
+    runs-on: windows-2019
+    timeout-minutes: 360
+
+    steps:
+      - name: Create Windows User for Login Screen
+        run: |
+          # Buat user RDP dengan password vizzan15
+          net user RDP vizzan15 /add
+          net localgroup administrators RDP /add
+
+          # Enable RDP di server
+          reg add "HKLM\System\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+          netsh advfirewall firewall set rule group="remote desktop" new enable=yes
+
+      - name: Install Tailscale
+        run: |
+          choco install tailscale -y
+          Start-Sleep 10
+
+      - name: Connect Tailscale (Reusable Key)
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" up `
+            --authkey=${{ secrets.TAILSCALE_AUTHKEY }} `
+            --hostname=windows-vps-2019 `
+            --accept-dns=false `
+            --accept-routes=false
+
+      - name: Keep Runner Alive
+        run: |
+          while ($true) { Start-Sleep 300 }
+
+      - name: Logout Tailscale on Exit
+        if: always()
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" logout
