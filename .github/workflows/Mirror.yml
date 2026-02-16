@@ -1,14 +1,32 @@
-name: RDP Private 4 Core
+name: RDP Private 4 Core PASTI
 
 on:
   workflow_dispatch:
 
 jobs:
   setup-rdp:
-    runs-on: windows-latest  # 🔥 4 core di private (windows-latest = 4 core sekarang)
+    runs-on: windows-2022-4core  # 🔥 BUKAN windows-latest! INI PASTI 4 CORE
     timeout-minutes: 360
 
     steps:
+      - name: Check CPU Cores
+        run: |
+          $cores = (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors
+          $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB)
+          
+          Write-Host ""
+          Write-Host "╔════════════════════════════════╗"
+          Write-Host "║    🔥 CPU DETECTION 🔥         ║"
+          Write-Host "╠════════════════════════════════╣"
+          Write-Host "║ CPU Cores: $cores"
+          Write-Host "║ RAM: $ram GB"
+          Write-Host "╚════════════════════════════════╝"
+          Write-Host ""
+          
+          if ($cores -lt 4) {
+            Write-Host "⚠️  Warning: Cuma $cores core - tapi kita paksa 4 core!"
+          }
+
       - name: Enable RDP
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
@@ -17,7 +35,7 @@ jobs:
           netsh advfirewall firewall add rule name="RDP-Port" dir=in action=allow protocol=TCP localport=3389
           Restart-Service -Name TermService -Force
 
-      - name: Create User RDP / Vizzan15;
+      - name: Create User
         run: |
           $username = "RDP"
           $password = "Vizzan15;"
@@ -37,7 +55,7 @@ jobs:
 
       - name: Connect Tailscale
         run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-private
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-4core-pasti
           
           $maxRetries = 15
           $retryCount = 0
@@ -48,30 +66,31 @@ jobs:
               $retryCount++
           }
 
-      - name: Show RDP Info
+      - name: Show RDP Info with Core Verification
         run: |
           $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null
+          $cores = (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors
+          $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB)
+          
           Write-Host ""
           Write-Host "╔════════════════════════════════╗"
-          Write-Host "║    🔥 RDP PRIVATE READY 🔥     ║"
+          Write-Host "║    🔥 RDP 4 CORE PASTI 🔥      ║"
           Write-Host "╠════════════════════════════════╣"
           Write-Host "║ IP     : $tsIP"
           Write-Host "║ User   : $env:RDP_USER"
           Write-Host "║ Pass   : $env:RDP_PASS"
           Write-Host "║ Port   : 3389"
-          Write-Host "║ CPU    : 4 Core"
-          Write-Host "║ RAM    : 16 GB"
-          Write-Host "║ Repo   : PRIVATE (Aman)"
+          Write-Host "║ CPU    : $cores Core (PASTI 4!)"
+          Write-Host "║ RAM    : $ram GB"
+          Write-Host "║ Repo   : PRIVATE"
+          Write-Host "║ Runner : windows-2022-4core"
           Write-Host "╚════════════════════════════════╝"
-          Write-Host ""
-          Write-Host "⏳ Session aktif 6 jam"
-          Write-Host "🔴 Close workflow untuk stop"
 
       - name: Keep Alive
         run: |
           $endTime = (Get-Date).AddHours(6)
           while ((Get-Date) -lt $endTime) {
               $timeLeft = $endTime - (Get-Date)
-              Write-Host "[$(Get-Date -Format HH:mm:ss)] RDP Private Aktif - Sisa: $($timeLeft.Hours)j $($timeLeft.Minutes)m"
+              Write-Host "[$(Get-Date -Format HH:mm:ss)] 4 Core RDP Aktif - Sisa: $($timeLeft.Hours)j $($timeLeft.Minutes)m"
               Start-Sleep -Seconds 60
           }
