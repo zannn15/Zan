@@ -1,0 +1,73 @@
+name: RDP 8 Core
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-rdp:
+    runs-on: windows-2022-8core  # 🔥 8 core 32 GB RAM - sweet spot!
+    timeout-minutes: 360
+
+    steps:
+      - name: Enable RDP
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          netsh advfirewall firewall delete rule name="RDP-Port" 2>$null
+          netsh advfirewall firewall add rule name="RDP-Port" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service -Name TermService -Force
+
+      - name: Create User
+        run: |
+          $username = "RDP"
+          $password = "Vizzan15;"
+          net user $username /delete 2>$null
+          net user $username $password /add
+          net localgroup Administrators $username /add
+          net localgroup "Remote Desktop Users" $username /add
+          echo "RDP_USER=$username" >> $env:GITHUB_ENV
+          echo "RDP_PASS=$password" >> $env:GITHUB_ENV
+
+      - name: Install Tailscale
+        run: |
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $output = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+          Start-Process msiexec.exe -Wait -ArgumentList "/i `"$output`" /quiet /norestart"
+
+      - name: Connect Tailscale
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-8core
+          
+          $maxRetries = 15
+          $retryCount = 0
+          $tsIP = $null
+          while ($retryCount -lt $maxRetries -and -not $tsIP) {
+              Start-Sleep -Seconds 4
+              $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null
+              $retryCount++
+          }
+
+      - name: Show RDP Info
+        run: |
+          $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null
+          Write-Host ""
+          Write-Host "╔════════════════════════════════╗"
+          Write-Host "║    🔥 RDP 8 CORE READY 🔥      ║"
+          Write-Host "╠════════════════════════════════╣"
+          Write-Host "║ IP     : $tsIP"
+          Write-Host "║ User   : $env:RDP_USER"
+          Write-Host "║ Pass   : $env:RDP_PASS"
+          Write-Host "║ Port   : 3389"
+          Write-Host "║ CPU    : 8 Core"
+          Write-Host "║ RAM    : 32 GB"
+          Write-Host "╚════════════════════════════════╝"
+
+      - name: Keep Alive
+        run: |
+          $endTime = (Get-Date).AddHours(6)
+          while ((Get-Date) -lt $endTime) {
+              $timeLeft = $endTime - (Get-Date)
+              Write-Host "[$(Get-Date -Format HH:mm:ss)] 8 Core RDP Aktif - Sisa: $($timeLeft.Hours)j $($timeLeft.Minutes)m"
+              Start-Sleep -Seconds 60
+          }
