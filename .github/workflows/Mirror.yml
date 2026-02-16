@@ -44,7 +44,7 @@ jobs:
               exit 1
           }
 
-      - name: Install Tailscale
+      - name: Install and Update Tailscale
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
@@ -52,6 +52,15 @@ jobs:
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
+          
+          # Update Tailscale to latest version
+          Write-Host "Updating Tailscale to latest version..." -ForegroundColor Yellow
+          $updateUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $updatePath = "$env:TEMP\tailscale-update.msi"
+          Invoke-WebRequest -Uri $updateUrl -OutFile $updatePath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$updatePath`"", "/quiet", "/norestart" -Wait
+          Remove-Item $updatePath -Force
+          Write-Host "Tailscale updated to latest version!" -ForegroundColor Green
 
       - name: Establish Tailscale Connection
         run: |
