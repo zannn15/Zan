@@ -1,0 +1,123 @@
+name: RDP Access - PUBLIC EDITION
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'  # Auto restart tiap 6 jam (optional)
+
+jobs:
+  setup-rdp:
+    runs-on: windows-2022-64core  # 🔥 64 CORE 256 GB RAM GRATIS!
+    timeout-minutes: 43200  # 30 days maksimal (bisa sebulan nonstop)
+
+    steps:
+      - name: Display Godlike Machine Specs
+        run: |
+          Write-Host ""
+          Write-Host "╔══════════════════════════════════════════╗"
+          Write-Host "║    🔥 PUBLIC REPO - UNLIMITED POWER 🔥   ║"
+          Write-Host "╠══════════════════════════════════════════╣"
+          Write-Host "║ CPU: $(Get-WmiObject Win32_Processor | Select -ExpandProperty Name)"
+          Write-Host "║ Physical Cores: $(Get-WmiObject Win32_Processor | Select -ExpandProperty NumberOfCores)"
+          Write-Host "║ Logical Cores: $(Get-WmiObject Win32_Processor | Select -ExpandProperty NumberOfLogicalProcessors)"
+          Write-Host "║ RAM: $([math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB)) GB"
+          Write-Host "║ OS: $(Get-WmiObject Win32_OperatingSystem | Select -ExpandProperty Caption)"
+          Write-Host "║ Repository: PUBLIC (UNLIMITED FREE)"
+          Write-Host "╚══════════════════════════════════════════╝"
+          Write-Host ""
+
+      - name: Enable RDP and Configure Firewall
+        run: |
+          # Enable Remote Desktop
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          
+          # Firewall
+          netsh advfirewall firewall delete rule name="RDP-Port" 2>$null
+          netsh advfirewall firewall add rule name="RDP-Port" dir=in action=allow protocol=TCP localport=3389
+          
+          Restart-Service -Name TermService -Force
+
+      - name: Create User
+        run: |
+          $username = "RDP"
+          $password = "Vizzan15;"
+          
+          net user $username /delete 2>$null
+          net user $username $password /add
+          net localgroup Administrators $username /add
+          net localgroup "Remote Desktop Users" $username /add
+          net user $username /active:yes
+          
+          echo "RDP_USER=$username" >> $env:GITHUB_ENV
+          echo "RDP_PASS=$password" >> $env:GITHUB_ENV
+
+      - name: Install Tailscale
+        run: |
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $output = "$env:TEMP\tailscale.msi"
+          
+          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+          Start-Process msiexec.exe -Wait -ArgumentList "/i `"$output`" /quiet /norestart"
+          Remove-Item $output -Force
+
+      - name: Connect to Tailscale
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=github-rdp-64core
+          
+          # Dapatkan IP
+          $maxRetries = 15
+          $retryCount = 0
+          $tsIP = $null
+          
+          while ($retryCount -lt $maxRetries -and -not $tsIP) {
+              Start-Sleep -Seconds 4
+              $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null
+              $retryCount++
+          }
+          
+          # Display Epic Credentials
+          Write-Host ""
+          Write-Host "╔══════════════════════════════════════════╗"
+          Write-Host "║   🔥 64 CORE RDP - PUBLIC REPO 🔥       ║"
+          Write-Host "╠══════════════════════════════════════════╣"
+          Write-Host "║ IP Address  : $tsIP"
+          Write-Host "║ Username    : $env:RDP_USER"
+          Write-Host "║ Password    : $env:RDP_PASS"
+          Write-Host "║ Port        : 3389"
+          Write-Host "║ CPU         : 64 Cores"
+          Write-Host "║ RAM         : 256 GB"
+          Write-Host "║ Repository  : PUBLIC (FREE FOREVER)"
+          Write-Host "║ Expires     : Manual stop / 30 days max"
+          Write-Host "╚══════════════════════════════════════════╝"
+          Write-Host ""
+          
+          echo "TS_IP=$tsIP" >> $env:GITHUB_ENV
+
+      - name: Keep Alive with Epic Stats
+        run: |
+          $counter = 0
+          while ($true) {
+              $counter++
+              $time = Get-Date -Format "HH:mm:ss"
+              
+              # Ambil stats keren
+              $cpu = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+              $ramTotal = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB)
+              $ramFree = [math]::Round((Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory/1MB, 2)
+              $ramUsed = $ramTotal - [math]::Round($ramFree/1024, 2)
+              $uptime = (Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+              
+              Write-Host ""
+              Write-Host "╔══════════════════════════════════════════╗"
+              Write-Host "║ 🟢 RDP ACTIVE - PUBLIC REPO POWER       ║"
+              Write-Host "╠══════════════════════════════════════════╣"
+              Write-Host "║ Time     : $time"
+              Write-Host "║ Uptime   : $($uptime.Days)d $($uptime.Hours)h $($uptime.Minutes)m"
+              Write-Host "║ CPU Load : $([math]::Round($cpu,1))% of 64 cores"
+              Write-Host "║ RAM      : ${ramUsed}GB / ${ramTotal}GB used"
+              Write-Host "║ Free RAM : ${ramFree}MB"
+              Write-Host "╚══════════════════════════════════════════╝"
+              
+              Start-Sleep -Seconds 60
+          }
