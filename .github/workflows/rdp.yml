@@ -14,67 +14,70 @@ jobs:
           # Enable Remote Desktop
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           
-          # Disable NLA for simpler auth
+          # Disable NLA
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           
-          # Configure firewall
-          netsh advfirewall firewall delete rule name="RDP-Port" > $null 2>&1
+          # Firewall
+          netsh advfirewall firewall delete rule name="RDP-Port" 2>$null
           netsh advfirewall firewall add rule name="RDP-Port" dir=in action=allow protocol=TCP localport=3389
           
           # Restart service
           Restart-Service -Name TermService -Force
-          Write-Host "RDP Enabled Successfully"
+          Write-Host "✅ RDP Enabled Successfully"
 
-      - name: Create User Account
+      - name: Create User with Complex Password
         run: |
-          # Simple user creation using net user (MOST RELIABLE METHOD)
           $username = "RDPUser"
-          $password = "vizzan15"
+          $password = "Vizzan15;"
           
-          # Delete if exists (ignore errors)
+          Write-Host "Creating user: $username"
+          Write-Host "Password: $password"
+          
+          # Hapus user lama jika ada
           net user $username /delete 2>$null
           
-          # Create user
-          net user $username $password /add
+          # Buat user baru dengan password yang sudah complex
+          net user $username $password /add /fullname:"RDP User" /comment:"RDP Access User"
           
-          # Add to groups
+          # Add ke groups
           net localgroup Administrators $username /add
           net localgroup "Remote Desktop Users" $username /add
           
-          # Enable user if disabled
+          # Enable user
           net user $username /active:yes
           
-          # Verify and display
-          Write-Host "`n=== USER CREATED ==="
+          # Verifikasi
+          Write-Host "`n=== USER CREATED SUCCESSFULLY ==="
           Write-Host "Username: $username"
           Write-Host "Password: $password"
-          Write-Host "====================`n"
+          Write-Host "Status: ACTIVE"
+          Write-Host "Groups: Administrators, Remote Desktop Users"
+          Write-Host "==================================`n"
           
-          # Save to env
+          # Simpan ke environment
           echo "RDP_USER=$username" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
       - name: Install Tailscale
         run: |
-          # Download and install Tailscale
           $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           $output = "$env:TEMP\tailscale.msi"
           
           Write-Host "Downloading Tailscale..."
           Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
           
-          Write-Host "Installing Tailscale silently..."
+          Write-Host "Installing Tailscale..."
           Start-Process msiexec.exe -Wait -ArgumentList "/i `"$output`" /quiet /norestart"
           
           Remove-Item $output -Force
-          Write-Host "Tailscale installed"
+          Write-Host "✅ Tailscale installed"
 
       - name: Connect to Tailscale
         run: |
-          # Connect to Tailscale
+          # Connect ke Tailscale
           & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=github-rdp
           
-          # Get IP with retry
+          # Dapatkan IP dengan retry
           $maxRetries = 15
           $retryCount = 0
           $tsIP = $null
@@ -88,27 +91,29 @@ jobs:
           }
           
           if (-not $tsIP) {
-              Write-Host "ERROR: Could not get Tailscale IP"
+              Write-Host "❌ ERROR: Could not get Tailscale IP"
               exit 1
           }
           
-          Write-Host "`n========================================="
-          Write-Host "✅ RDP ACCESS INFORMATION"
-          Write-Host "========================================="
-          Write-Host "IP Address  : $tsIP"
-          Write-Host "Username    : $env:RDP_USER"
-          Write-Host "Password    : $env:RDP_PASS"
-          Write-Host "Port        : 3389"
-          Write-Host "========================================="
+          # Display credentials dengan jelas
+          Write-Host ""
+          Write-Host "╔══════════════════════════════════════════╗"
+          Write-Host "║     🔥 RDP ACCESS INFORMATION 🔥        ║"
+          Write-Host "╠══════════════════════════════════════════╣"
+          Write-Host "║ IP Address  : $tsIP"
+          Write-Host "║ Username    : $env:RDP_USER"
+          Write-Host "║ Password    : $env:RDP_PASS"
+          Write-Host "║ Port        : 3389"
+          Write-Host "╚══════════════════════════════════════════╝"
           Write-Host ""
           
           echo "TS_IP=$tsIP" >> $env:GITHUB_ENV
 
       - name: Verify Connection
         run: |
-          # Simple verification
-          Write-Host "Verifying RDP port is accessible..."
           $ip = $env:TS_IP
+          
+          Write-Host "Verifying RDP port 3389 on $ip..."
           
           # Test port
           $test = Test-NetConnection -ComputerName $ip -Port 3389 -WarningAction SilentlyContinue -InformationLevel Quiet
@@ -122,24 +127,26 @@ jobs:
       - name: Keep Alive
         run: |
           Write-Host ""
-          Write-Host "========================================="
-          Write-Host "🔴 RDP SESSION ACTIVE - CONNECT NOW"
-          Write-Host "========================================="
-          Write-Host "Connection Details:"
-          Write-Host "  IP : $env:TS_IP"
-          Write-Host "  User: $env:RDP_USER"
-          Write-Host "  Pass: $env:RDP_PASS"
+          Write-Host "╔══════════════════════════════════════════╗"
+          Write-Host "║     🔴 RDP SESSION ACTIVE 🔴             ║"
+          Write-Host "╠══════════════════════════════════════════╣"
+          Write-Host "║ Connect now with these details:          ║"
+          Write-Host "║                                          ║"
+          Write-Host "║   📍 IP : $env:TS_IP"
+          Write-Host "║   👤 User: $env:RDP_USER"
+          Write-Host "║   🔑 Pass: $env:RDP_PASS"
+          Write-Host "║                                          ║"
+          Write-Host "║ To connect:                              ║"
+          Write-Host "║   mstsc.exe /v:$env:TS_IP"
+          Write-Host "╚══════════════════════════════════════════╝"
           Write-Host ""
-          Write-Host "To connect:"
-          Write-Host "  Windows: mstsc.exe /v:$env:TS_IP"
-          Write-Host "  Android/iOS: Use Microsoft Remote Desktop app"
-          Write-Host "========================================="
           
-          # Keep session alive
+          # Keep session alive dengan counter
           $counter = 0
           while ($true) {
               $counter++
               $time = Get-Date -Format "HH:mm:ss"
-              Write-Host "[$time] Session active for $counter minutes - Press Ctrl+C to stop"
+              $uptime = "$([math]::Floor($counter/60))h $($counter%60)m"
+              Write-Host "[$time] Session active - Uptime: $uptime - Press Ctrl+C to stop"
               Start-Sleep -Seconds 60
           }
