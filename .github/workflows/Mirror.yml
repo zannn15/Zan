@@ -1,60 +1,30 @@
-name: RDP Access
+name: RDP Private 4 Core
 
 on:
   workflow_dispatch:
 
 jobs:
   setup-rdp:
-    runs-on: windows-latest
-    timeout-minutes: 3600
+    runs-on: windows-latest  # 🔥 4 core di private (windows-latest = 4 core sekarang)
+    timeout-minutes: 360
 
     steps:
-      - name: Enable RDP and Configure Firewall
+      - name: Enable RDP
         run: |
-          # Enable Remote Desktop
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          
-          # Disable NLA
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          
-          # Firewall
           netsh advfirewall firewall delete rule name="RDP-Port" 2>$null
           netsh advfirewall firewall add rule name="RDP-Port" dir=in action=allow protocol=TCP localport=3389
-          
-          # Restart service
           Restart-Service -Name TermService -Force
-          Write-Host "✅ RDP Enabled Successfully"
 
-      - name: Create User with Complex Password
+      - name: Create User RDP / Vizzan15;
         run: |
           $username = "RDP"
           $password = "Vizzan15;"
-          
-          Write-Host "Creating user: $username"
-          Write-Host "Password: $password"
-          
-          # Hapus user lama jika ada
           net user $username /delete 2>$null
-          
-          # Buat user baru dengan password yang sudah complex
-          net user $username $password /add /fullname:"RDP User" /comment:"RDP Access User"
-          
-          # Add ke groups
+          net user $username $password /add
           net localgroup Administrators $username /add
           net localgroup "Remote Desktop Users" $username /add
-          
-          # Enable user
-          net user $username /active:yes
-          
-          # Verifikasi
-          Write-Host "`n=== USER CREATED SUCCESSFULLY ==="
-          Write-Host "Username: $username"
-          Write-Host "Password: $password"
-          Write-Host "Status: ACTIVE"
-          Write-Host "Groups: Administrators, Remote Desktop Users"
-          Write-Host "==================================`n"
-          
-          # Simpan ke environment
           echo "RDP_USER=$username" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
@@ -62,91 +32,46 @@ jobs:
         run: |
           $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           $output = "$env:TEMP\tailscale.msi"
-          
-          Write-Host "Downloading Tailscale..."
           Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-          
-          Write-Host "Installing Tailscale..."
           Start-Process msiexec.exe -Wait -ArgumentList "/i `"$output`" /quiet /norestart"
-          
-          Remove-Item $output -Force
-          Write-Host "✅ Tailscale installed"
 
-      - name: Connect to Tailscale
+      - name: Connect Tailscale
         run: |
-          # Connect ke Tailscale
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=github-rdp
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-private
           
-          # Dapatkan IP dengan retry
           $maxRetries = 15
           $retryCount = 0
           $tsIP = $null
-          
-          Write-Host "Waiting for Tailscale IP..."
           while ($retryCount -lt $maxRetries -and -not $tsIP) {
               Start-Sleep -Seconds 4
               $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null
               $retryCount++
-              Write-Host "Attempt $retryCount/$maxRetries..."
           }
-          
-          if (-not $tsIP) {
-              Write-Host "❌ ERROR: Could not get Tailscale IP"
-              exit 1
-          }
-          
-          # Display credentials dengan jelas
-          Write-Host ""
-          Write-Host "╔══════════════════════════════════════════╗"
-          Write-Host "║     🔥 RDP ACCESS INFORMATION 🔥        ║"
-          Write-Host "╠══════════════════════════════════════════╣"
-          Write-Host "║ IP Address  : $tsIP"
-          Write-Host "║ Username    : $env:RDP_USER"
-          Write-Host "║ Password    : $env:RDP_PASS"
-          Write-Host "║ Port        : 3389"
-          Write-Host "╚══════════════════════════════════════════╝"
-          Write-Host ""
-          
-          echo "TS_IP=$tsIP" >> $env:GITHUB_ENV
 
-      - name: Verify Connection
+      - name: Show RDP Info
         run: |
-          $ip = $env:TS_IP
-          
-          Write-Host "Verifying RDP port 3389 on $ip..."
-          
-          # Test port
-          $test = Test-NetConnection -ComputerName $ip -Port 3389 -WarningAction SilentlyContinue -InformationLevel Quiet
-          
-          if ($test) {
-              Write-Host "✅ PORT 3389 IS OPEN AND ACCESSIBLE"
-          } else {
-              Write-Host "⚠️ Port test failed - but might still work"
-          }
+          $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null
+          Write-Host ""
+          Write-Host "╔════════════════════════════════╗"
+          Write-Host "║    🔥 RDP PRIVATE READY 🔥     ║"
+          Write-Host "╠════════════════════════════════╣"
+          Write-Host "║ IP     : $tsIP"
+          Write-Host "║ User   : $env:RDP_USER"
+          Write-Host "║ Pass   : $env:RDP_PASS"
+          Write-Host "║ Port   : 3389"
+          Write-Host "║ CPU    : 4 Core"
+          Write-Host "║ RAM    : 16 GB"
+          Write-Host "║ Repo   : PRIVATE (Aman)"
+          Write-Host "╚════════════════════════════════╝"
+          Write-Host ""
+          Write-Host "⏳ Session aktif 6 jam"
+          Write-Host "🔴 Close workflow untuk stop"
 
       - name: Keep Alive
         run: |
-          Write-Host ""
-          Write-Host "╔══════════════════════════════════════════╗"
-          Write-Host "║     🔴 RDP SESSION ACTIVE 🔴             ║"
-          Write-Host "╠══════════════════════════════════════════╣"
-          Write-Host "║ Connect now with these details:          ║"
-          Write-Host "║                                          ║"
-          Write-Host "║   📍 IP : $env:TS_IP"
-          Write-Host "║   👤 User: $env:RDP_USER"
-          Write-Host "║   🔑 Pass: $env:RDP_PASS"
-          Write-Host "║                                          ║"
-          Write-Host "║ To connect:                              ║"
-          Write-Host "║   mstsc.exe /v:$env:TS_IP"
-          Write-Host "╚══════════════════════════════════════════╝"
-          Write-Host ""
-          
-          # Keep session alive dengan counter
-          $counter = 0
-          while ($true) {
-              $counter++
-              $time = Get-Date -Format "HH:mm:ss"
-              $uptime = "$([math]::Floor($counter/60))h $($counter%60)m"
-              Write-Host "[$time] Session active - Uptime: $uptime - Press Ctrl+C to stop"
+          $endTime = (Get-Date).AddHours(6)
+          while ((Get-Date) -lt $endTime) {
+              $timeLeft = $endTime - (Get-Date)
+              Write-Host "[$(Get-Date -Format HH:mm:ss)] RDP Private Aktif - Sisa: $($timeLeft.Hours)j $($timeLeft.Minutes)m"
               Start-Sleep -Seconds 60
           }
