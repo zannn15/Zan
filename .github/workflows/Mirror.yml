@@ -1,96 +1,85 @@
-name: RDP Private 4 Core PASTI
+name: RDP Fix
 
 on:
   workflow_dispatch:
 
 jobs:
   setup-rdp:
-    runs-on: windows-2022-4core  # 🔥 BUKAN windows-latest! INI PASTI 4 CORE
+    runs-on: windows-latest
     timeout-minutes: 360
 
     steps:
-      - name: Check CPU Cores
-        run: |
-          $cores = (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors
-          $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB)
-          
-          Write-Host ""
-          Write-Host "╔════════════════════════════════╗"
-          Write-Host "║    🔥 CPU DETECTION 🔥         ║"
-          Write-Host "╠════════════════════════════════╣"
-          Write-Host "║ CPU Cores: $cores"
-          Write-Host "║ RAM: $ram GB"
-          Write-Host "╚════════════════════════════════╝"
-          Write-Host ""
-          
-          if ($cores -lt 4) {
-            Write-Host "⚠️  Warning: Cuma $cores core - tapi kita paksa 4 core!"
-          }
-
       - name: Enable RDP
         run: |
+          # Enable RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          netsh advfirewall firewall delete rule name="RDP-Port" 2>$null
+          
+          # Firewall
+          netsh advfirewall firewall delete rule name="RDP-Port" > $null 2>&1
           netsh advfirewall firewall add rule name="RDP-Port" dir=in action=allow protocol=TCP localport=3389
-          Restart-Service -Name TermService -Force
+          
+          Write-Host "✅ RDP Enabled"
 
       - name: Create User
         run: |
           $username = "RDP"
           $password = "Vizzan15;"
-          net user $username /delete 2>$null
+          
+          # Hapus user lama kalo ada
+          net user $username /delete > $null 2>&1
+          
+          # Buat user baru
           net user $username $password /add
           net localgroup Administrators $username /add
           net localgroup "Remote Desktop Users" $username /add
+          
+          Write-Host "✅ User created: $username / $password"
+          
+          # Simpan credentials
           echo "RDP_USER=$username" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
       - name: Install Tailscale
         run: |
+          Write-Host "Installing Tailscale..."
+          
+          # Download
           $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           $output = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-          Start-Process msiexec.exe -Wait -ArgumentList "/i `"$output`" /quiet /norestart"
+          
+          # Install
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$output`"", "/quiet", "/norestart" -Wait
+          
+          Write-Host "✅ Tailscale installed"
 
       - name: Connect Tailscale
         run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-4core-pasti
+          # Connect
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-fix
           
-          $maxRetries = 15
-          $retryCount = 0
-          $tsIP = $null
-          while ($retryCount -lt $maxRetries -and -not $tsIP) {
-              Start-Sleep -Seconds 4
-              $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null
-              $retryCount++
-          }
-
-      - name: Show RDP Info with Core Verification
-        run: |
-          $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null
-          $cores = (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors
-          $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB)
+          # Dapatkan IP
+          Start-Sleep -Seconds 10
+          $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
           
           Write-Host ""
-          Write-Host "╔════════════════════════════════╗"
-          Write-Host "║    🔥 RDP 4 CORE PASTI 🔥      ║"
-          Write-Host "╠════════════════════════════════╣"
-          Write-Host "║ IP     : $tsIP"
-          Write-Host "║ User   : $env:RDP_USER"
-          Write-Host "║ Pass   : $env:RDP_PASS"
-          Write-Host "║ Port   : 3389"
-          Write-Host "║ CPU    : $cores Core (PASTI 4!)"
-          Write-Host "║ RAM    : $ram GB"
-          Write-Host "║ Repo   : PRIVATE"
-          Write-Host "║ Runner : windows-2022-4core"
-          Write-Host "╚════════════════════════════════╝"
+          Write-Host "================================"
+          Write-Host "    🔥 RDP READY TO CONNECT 🔥   "
+          Write-Host "================================"
+          Write-Host "IP Address : $tsIP"
+          Write-Host "Username   : $env:RDP_USER"
+          Write-Host "Password   : $env:RDP_PASS"
+          Write-Host "Port       : 3389"
+          Write-Host "================================"
+          Write-Host "Konek pake Remote Desktop sekarang!"
+          Write-Host ""
+          
+          echo "TS_IP=$tsIP" >> $env:GITHUB_ENV
 
       - name: Keep Alive
         run: |
-          $endTime = (Get-Date).AddHours(6)
-          while ((Get-Date) -lt $endTime) {
-              $timeLeft = $endTime - (Get-Date)
-              Write-Host "[$(Get-Date -Format HH:mm:ss)] 4 Core RDP Aktif - Sisa: $($timeLeft.Hours)j $($timeLeft.Minutes)m"
-              Start-Sleep -Seconds 60
+          Write-Host "🟢 RDP Session Active - Close workflow to stop"
+          while ($true) {
+              Write-Host "[$(Get-Date -Format HH:mm:ss)] RDP running..."
+              Start-Sleep -Seconds 120
           }
