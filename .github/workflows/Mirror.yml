@@ -50,10 +50,8 @@ jobs:
 
       - name: Establish Tailscale Connection (IP TETAP)
         run: |
-          # PAKAI HOSTNAME TETAP biar IP sama
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-ip-tetep
           
-          # Wait for Tailscale to assign an IP
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 10) {
@@ -78,6 +76,12 @@ jobs:
               exit 1
           }
           Write-Host "TCP connectivity successful!"
+
+      - name: Logout Cleanup
+        if: always()
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" logout
+          Write-Host "✅ Logout Tailscale sukses, device tetap terdaftar (offline)"
 
       - name: Maintain Connection
         run: |
