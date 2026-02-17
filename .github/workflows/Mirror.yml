@@ -6,7 +6,7 @@ on:
 jobs:
   secure-rdp:
     runs-on: windows-latest
-    timeout-minutes: 3600
+    timeout-minutes: 360
 
     steps:
       - name: Configure Core RDP Settings
@@ -33,24 +33,18 @@ jobs:
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
           
           echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
-          
-          if (-not (Get-LocalUser -Name "RDP")) {
-              Write-Error "User creation failed"
-              exit 1
-          }
 
       - name: Install Tailscale
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
-          
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
 
-      - name: Connect Tailscale (IP Tetap)
+      - name: Connect Tailscale (IP Tetap + Reset)
         run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-ip-tetep
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-ip-tetep --reset
           
           $tsIP = $null
           $retries = 0
@@ -59,23 +53,16 @@ jobs:
               Start-Sleep -Seconds 5
               $retries++
           }
-          
-          if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned. Exiting."
-              exit 1
-          }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
       
       - name: Verify RDP
         run: |
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
               exit 1
           }
-          Write-Host "TCP connectivity successful!"
+          Write-Host "✅ RDP ready!"
 
       - name: Show RDP Info
         run: |
@@ -84,20 +71,21 @@ jobs:
           Write-Host "Username  : RDP"
           Write-Host "Password  : Vizzan15;"
           Write-Host "Hostname  : rdp-ip-tetep"
-          Write-Host "IP Status : TETAP (jangan hapus device)"
+          Write-Host "Durasi    : 5 jam 35 menit"
           Write-Host "=============================`n"
 
-      - name: Maintain Connection (6 Jam)
+      - name: ⏳ Maintain Connection (5 Jam 35 Menit)
         run: |
-          $endTime = (Get-Date).AddHours(6)
+          $endTime = (Get-Date).AddHours(5).AddMinutes(35)
           while ((Get-Date) -lt $endTime) {
               $timeLeft = $endTime - (Get-Date)
-              Write-Host "[$(Get-Date -Format HH:mm:ss)] RDP Aktif - IP: $env:TAILSCALE_IP - Sisa: $($timeLeft.Hours)j $($timeLeft.Minutes)m"
-              Start-Sleep -Seconds 300
+              Write-Host "[$(Get-Date -Format HH:mm:ss)] RDP Aktif - Sisa: $($timeLeft.Hours)j $($timeLeft.Minutes)m $($timeLeft.Seconds)d"
+              Start-Sleep -Seconds 60
           }
+          Write-Host "⏰ Waktu habis! Memulai logout..."
 
-      - name: Logout Cleanup
+      - name: 🔌 Logout Tailscale
         if: always()
         run: |
           & "C:\Program Files\Tailscale\tailscale.exe" logout
-          Write-Host "✅ Logout Tailscale sukses - Device offline, IP tetap"
+          Write-Host "✅ Logout sukses - Device offline, IP tetap"
