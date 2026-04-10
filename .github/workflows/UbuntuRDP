@@ -1,0 +1,39 @@
+name: Ubuntu-Tailscale-Vizzan
+
+on: 
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Setup Desktop & RDP
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xfce4 xfce4-goodies xrdp
+          
+          # Set password sesuai permintaan: vizzan15
+          echo "runner:vizzan15" | sudo chpasswd
+          
+          # Konfigurasi XRDP agar pakai XFCE
+          echo "startxfce4" > ~/.xsession
+          sudo systemctl restart xrdp
+          
+          # Beri info IP Tailscale di log
+          echo "--------------------------------"
+          echo "User: runner"
+          echo "Pass: vizzan15"
+          echo "IP Tailscale Server Ini:"
+          tailscale ip -4
+          echo "--------------------------------"
+
+      - name: Keep Alive (6 Jam)
+        run: sleep 21600
