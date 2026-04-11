@@ -1,0 +1,61 @@
+name: Pterodactyl Super Fixed
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install & Connect Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Install Pterodactyl Panel
+        run: |
+          IP_TS=$(tailscale ip -4)
+          # Download khusus script Panel
+          curl -s -L -o panel.sh https://raw.githubusercontent.com/pterodactyl-installer/pterodactyl-installer/master/panel.sh
+          chmod +x panel.sh
+          
+          # Jalankan instalasi Panel dengan semua parameter langsung
+          sudo ./panel.sh --email "admin@zan.my.id" \
+            --user "admin" \
+            --firstname "Zan" \
+            --lastname "Admin" \
+            --password "zan12345" \
+            --fqdn "$IP_TS" \
+            --timezone "Asia/Jakarta" \
+            --no-interact
+
+      - name: Install Pterodactyl Wings
+        run: |
+          # Download khusus script Wings
+          curl -s -L -o wings.sh https://raw.githubusercontent.com/pterodactyl-installer/pterodactyl-installer/master/wings.sh
+          chmod +x wings.sh
+          
+          # Jalankan instalasi Wings
+          sudo ./wings.sh --no-interact
+
+      - name: Update DuckDNS
+        run: |
+          IP_TS=$(tailscale ip -4)
+          curl -s "https://www.duckdns.org/update?domains=zanhosting&token=${{ secrets.DUCKDNS_TOKEN }}&ip=$IP_TS"
+
+      - name: Telegram Notification
+        if: always()
+        run: |
+          IP_TS=$(tailscale ip -4)
+          MESSAGE="✅ *ZanHosting Fixed 100%!*%0A%0A🌐 *Domain:* http://zanhosting.duckdns.org%0A📍 *IP Tailscale:* \`$IP_TS\`%0A👤 *User:* \`admin\`%0A🔑 *Pass:* \`zan12345\`"
+          
+          curl -s -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage \
+            -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+            -d text="$MESSAGE" \
+            -d parse_mode="Markdown"
+
+      - name: Keep Alive (6 Hours)
+        run: sleep 21600
