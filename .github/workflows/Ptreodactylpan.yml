@@ -17,17 +17,14 @@ jobs:
 
       - name: Setup Pterodactyl (Panel & Wings)
         run: |
-          # 1. Ambil IP Tailscale
           IP_TS=$(tailscale ip -4)
           
-          # 2. Download script-nya dulu ke file lokal
+          # Download script
           curl -s -L -o install.sh https://pterodactyl-installer.se
-          
-          # 3. Kasih izin eksekusi
           chmod +x install.sh
           
-          # 4. Jalankan dengan SUDO secara langsung
-          sudo ./install.sh --install-panel --install-wings \
+          # Kirim input '2' (Install Both) secara otomatis ke script
+          printf "2\n" | sudo ./install.sh --install-panel --install-wings \
             --email "admin@zan.my.id" \
             --user "admin" \
             --firstname "Zan" \
@@ -46,10 +43,16 @@ jobs:
         if: always()
         run: |
           IP_TS=$(tailscale ip -4)
-          MESSAGE="✅ *ZanHosting Berhasil!*%0A%0A🌐 *Domain:* http://zanhosting.duckdns.org%0A📍 *IP Tailscale:* \`$IP_TS\`%0A👤 *User:* \`admin\`%0A🔑 *Pass:* \`zan12345\`"
+          MESSAGE="🔥 *ZanHosting Online 6 Jam!*%0A%0A🌐 *Domain:* http://zanhosting.duckdns.org%0A📍 *IP Tailscale:* \`$IP_TS\`%0A👤 *User:* \`admin\`%0A🔑 *Pass:* \`zan12345\`"
           
           curl -s -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage \
             -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
             -d text="$MESSAGE" \
             -d parse_mode="Markdown"
-            
+
+      - name: Keep Server Alive (6 Hours)
+        run: |
+          echo "Server online... Jangan di-close workflow-nya!"
+          # Perintah agar GitHub tetap nyala selama 6 jam (21600 detik)
+          sleep 21600
+          
