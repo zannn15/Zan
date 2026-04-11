@@ -1,0 +1,57 @@
+name: Pterodactyl All-in-One Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install & Connect Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Setup Pterodactyl (Panel & Wings)
+        run: |
+          IP_TS=$(tailscale ip -4)
+          
+          # Download script
+          curl -s -L -o install.sh https://pterodactyl-installer.se
+          chmod +x install.sh
+          
+          # JURUS PAKSA: Masukkan angka 2 (untuk menu), lalu biarkan 'yes' menjawab semua pertanyaan berikutnya
+          (echo "2"; yes) | sudo ./install.sh --install-panel --install-wings \
+            --email "admin@zan.my.id" \
+            --user "admin" \
+            --firstname "Zan" \
+            --lastname "Admin" \
+            --password "zan12345" \
+            --fqdn "$IP_TS" \
+            --timezone "Asia/Jakarta" \
+            --no-interact
+
+      - name: Update DuckDNS
+        run: |
+          IP_TS=$(tailscale ip -4)
+          curl -s "https://www.duckdns.org/update?domains=zanhosting&token=${{ secrets.DUCKDNS_TOKEN }}&ip=$IP_TS"
+
+      - name: Telegram Notification
+        if: always()
+        run: |
+          IP_TS=$(tailscale ip -4)
+          MESSAGE="✅ *ZanHosting Akhirnya Berhasil!*%0A%0A🌐 *Domain:* http://zanhosting.duckdns.org%0A📍 *IP Tailscale:* \`$IP_TS\`%0A👤 *User:* \`admin\`%0A🔑 *Pass:* \`zan12345\`"
+          
+          curl -s -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage \
+            -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+            -d text="$MESSAGE" \
+            -d parse_mode="Markdown"
+
+      - name: Keep Alive (6 Hours)
+        run: |
+          echo "Server online 6 jam. Selamat ngoprek!"
+          sleep 21600
+          
