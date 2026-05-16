@@ -11,52 +11,57 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Enable RDP
+      - name: Configure Core RDP Settings
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "SecurityLayer" -Value 0 -Force
           netsh advfirewall firewall delete rule name="RDP-Tailscale" > $null 2>&1
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
           Restart-Service -Name TermService -Force
+          Write-Host "✅ RDP Enabled"
 
-      - name: Create User RDP
+      - name: Create RDP User
         run: |
           $user = "RDP"
           $pass = "Vizzan15;"
           net user $user $pass /add
           net localgroup Administrators $user /add
           net localgroup "Remote Desktop Users" $user /add
+          Write-Host "✅ User RDP created"
 
       - name: Install Tailscale
         run: |
           $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
-          $file = "$env:TEMP\ts.msi"
-          Invoke-WebRequest -Uri $url -OutFile $file
-          msiexec /i "$file" /quiet /norestart
-          Remove-Item $file -Force
+          $installer = "$env:TEMP\ts.msi"
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          msiexec /i "$installer" /quiet /norestart
+          Remove-Item $installer -Force
+          Write-Host "✅ Tailscale installed"
 
       - name: Connect Tailscale
         run: |
           & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TS_AUTH }} --hostname=rdp-fix
-          Start-Sleep 10
-          $ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
-          echo "IP=$ip" >> $env:GITHUB_ENV
+          Start-Sleep -Seconds 10
+          $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+          Write-Host "✅ Tailscale connected"
 
       - name: Kirim IP ke Telegram
         run: |
-          $msg = "✅ RDP READY%0AIP: $env:IP%0AUser: RDP%0APass: Vizzan15;"
+          $ip = "$env:TAILSCALE_IP"
+          $msg = "✅ RDP READY%0AIP: $ip%0AUser: RDP%0APass: Vizzan15;"
           $url = "https://api.telegram.org/bot${{ secrets.TG_BOT }}/sendMessage?chat_id=${{ secrets.TG_ID }}&text=$msg"
           Invoke-RestMethod -Uri $url -Method Get
+          Write-Host "✅ Telegram notification sent"
 
-      - name: Show Info
+      - name: Show RDP Info
         run: |
-          Write-Host ""
           Write-Host "====================="
-          Write-Host "IP : $env:IP"
+          Write-Host "IP : $env:TAILSCALE_IP"
           Write-Host "User: RDP"
           Write-Host "Pass: Vizzan15;"
           Write-Host "====================="
-          Write-Host ""
 
       - name: Keep Alive (6 Jam)
         run: |
@@ -67,7 +72,8 @@ jobs:
             Start-Sleep 300
           }
 
-      - name: Logout
+      - name: Logout Cleanup
         if: always()
         run: |
           & "C:\Program Files\Tailscale\tailscale.exe" logout
+          Write-Host "✅ Logout"
